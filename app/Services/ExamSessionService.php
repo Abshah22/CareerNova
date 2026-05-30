@@ -6,6 +6,7 @@ use App\Models\ExamSession;
 use App\Models\User;
 use App\Models\Subject;
 use App\Models\AnswerLog;
+use App\Models\Mcq;
 
 class ExamSessionService
 {
@@ -22,102 +23,113 @@ class ExamSessionService
 
     /**
      * Create a new exam session
-     * 
-     * @param User $user
-     * @param Subject $subject
-     * @param int $questionCount
-     * @param int $durationMinutes
-     * @return ExamSession
+     * CRITICAL: MCQs locked after creation
      */
     public function createSession(User $user, Subject $subject, $questionCount = 10, $durationMinutes = 20)
     {
+        // Ensure integers
+        $questionCount = (int) $questionCount;
+        $durationMinutes = (int) $durationMinutes;
+
+        // Get randomized MCQs
+        $mcqs = $this->mcqRandomizationService->getRandomMcqs($subject->id, $questionCount);
+        
+        // Create locked MCQ sequence
+        $mcqSequence = $mcqs->pluck('id')->toArray();
+
         $session = ExamSession::create([
             'user_id' => $user->id,
             'subject_id' => $subject->id,
             'total_questions' => $questionCount,
             'duration_minutes' => $durationMinutes,
+            'mcq_sequence' => json_encode($mcqSequence),
             'started_at' => now(),
+            'expires_at' => now()->addMinutes($durationMinutes),
             'status' => 'ongoing',
             'is_locked' => false,
         ]);
 
-        // Get randomized MCQs
-        $mcqs = $this->mcqRandomizationService->getRandomMcqs($subject->id, $questionCount);
-
-        // Store MCQ order in answer logs (without answers yet)
-        $mcqs->each(function ($mcq, $index) use ($session) {
+        // Pre-create answer logs with user_id ✅ CRITICAL FIX
+        foreach ($mcqs as $index => $mcq) {
             AnswerLog::create([
                 'exam_session_id' => $session->id,
-                'user_id' => $session->user_id,
+                'user_id' => $user->id,  // ✅ MUST INCLUDE THIS
                 'mcq_id' => $mcq->id,
                 'correct_answer' => $mcq->correct_answer,
                 'question_order' => $index,
+                'selected_answer' => null,
+                'is_correct' => false,
+                'time_taken_seconds' => 0,
             ]);
-        });
+        }
 
         return $session;
     }
 
     /**
-     * Lock session after start button is clicked
-     * 
-     * @param ExamSession $session
-     * @return ExamSession
+     * Lock session after start
      */
     public function lockSession(ExamSession $session)
     {
-        $session->update(['is_locked' => true]);
+        $session->update([
+            'is_locked' => true,
+            'started_at' => now(),
+        ]);
         return $session;
     }
 
     /**
-     * Submit an answer for a question
-     * 
-     * @param ExamSession $session
-     * @param int $mcqId
-     * @param string|null $selectedAnswer
-     * @param int $timeTaken
-     * @return AnswerLog
+     * Submit answer
      */
     public function submitAnswer(ExamSession $session, $mcqId, $selectedAnswer = null, $timeTaken = 0)
     {
+        $mcqId = (int) $mcqId;
+        $timeTaken = (int) $timeTaken;
+
         $answerLog = $session->answerLogs()
             ->where('mcq_id', $mcqId)
             ->firstOrFail();
 
+        $mcq = Mcq::findOrFail($mcqId);
+
         $answerLog->update([
             'selected_answer' => $selectedAnswer,
             'time_taken_seconds' => $timeTaken,
+            'is_correct' => $selectedAnswer === $mcq->correct_answer,
         ]);
-
-        // Mark answer as correct or incorrect
-        $this->scoringService->markAnswer($answerLog);
 
         return $answerLog;
     }
 
     /**
      * Submit entire exam
-     * 
-     * @param ExamSession $session
-     * @return ExamSession
      */
     public function submitExam(ExamSession $session)
     {
-        // Calculate final scores
-        $session = $this->scoringService->updateSessionScore($session);
+        $answerLogs = $session->answerLogs()->get();
 
-        // Update leaderboard
-        app(AnalyticsService::class)->updateLeaderboard($session->user);
+        $correctAnswers = $answerLogs->where('is_correct', true)->count();
+        $wrongAnswers = $answerLogs->where('is_correct', false)->where('selected_answer', '!=', null)->count();
+        $unanswered = $answerLogs->where('selected_answer', null)->count();
+        $totalQuestions = $answerLogs->count();
+        $percentage = $totalQuestions > 0 ? ($correctAnswers / $totalQuestions) * 100 : 0;
+
+        $session->update([
+            'status' => 'completed',
+            'finished_at' => now(),
+            'score' => $correctAnswers,
+            'correct_answers' => $correctAnswers,
+            'wrong_answers' => $wrongAnswers,
+            'unanswered' => $unanswered,
+            'percentage' => round($percentage, 2),
+            'time_taken_minutes' => $session->started_at->diffInMinutes(now()),
+        ]);
 
         return $session;
     }
 
     /**
-     * Auto-submit exam when time expires
-     * 
-     * @param ExamSession $session
-     * @return ExamSession
+     * Auto-submit when time expires
      */
     public function autoSubmitExam(ExamSession $session)
     {
@@ -130,10 +142,7 @@ class ExamSessionService
     }
 
     /**
-     * Check if session time has expired
-     * 
-     * @param ExamSession $session
-     * @return bool
+     * Check if session expired
      */
     public function isSessionExpired(ExamSession $session)
     {
@@ -147,9 +156,6 @@ class ExamSessionService
 
     /**
      * Get time remaining in seconds
-     * 
-     * @param ExamSession $session
-     * @return int
      */
     public function getTimeRemaining(ExamSession $session)
     {
@@ -161,10 +167,7 @@ class ExamSessionService
     }
 
     /**
-     * Get exam questions with randomized options
-     * 
-     * @param ExamSession $session
-     * @return array
+     * Get exam questions
      */
     public function getExamQuestions(ExamSession $session)
     {
@@ -188,14 +191,11 @@ class ExamSessionService
     }
 
     /**
-     * Get session summary after completion
-     * 
-     * @param ExamSession $session
-     * @return array
+     * Get session summary
      */
     public function getSessionSummary(ExamSession $session)
     {
-        $answerLogs = $session->answerLogs()->with('mcq')->get();
+        $answerLogs = $session->answerLogs()->with('mcq')->orderBy('question_order')->get();
 
         $results = $answerLogs->map(function ($log) {
             return [

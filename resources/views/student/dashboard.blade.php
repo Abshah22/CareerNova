@@ -104,7 +104,7 @@
                                                     {{ round($session->percentage, 1) }}%
                                                 </span>
                                             </td>
-                                            <td>{{ $session->finished_at->format('M d, Y') }}</td>
+                                            {{ $session->finished_at ? $session->finished_at->format('M d, Y') : 'Not Finished' }}
                                             <td>
                                                 <a href="/exam/session/{{ $session->id }}/result" class="btn btn-sm btn-info">
                                                     <i class="fas fa-eye"></i> View

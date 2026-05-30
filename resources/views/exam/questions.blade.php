@@ -259,19 +259,35 @@
     // Submit exam
     document.querySelector('.btn-submit-exam').addEventListener('click', () => {
         if (confirm('Are you sure you want to submit the exam?')) {
-            const sessionId = {{ $session->id }};
-            window.location.href = `/exam/session/${sessionId}/submit`;
+            document.getElementById('submitExamForm').submit();
         }
     });
 
     function autoSubmitExam() {
         alert('Time is up! Your exam will be auto-submitted.');
-        const sessionId = {{ $session->id }};
-        window.location.href = `/exam/session/${sessionId}/auto-submit`;
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/exam/session/{{ $session->id }}/auto-submit`;
+
+        const csrf = document.createElement('input');
+        csrf.type = 'hidden';
+        csrf.name = '_token';
+        csrf.value = '{{ csrf_token() }}';
+
+        form.appendChild(csrf);
+        document.body.appendChild(form);
+        form.submit();
+      
     }
 
     // Initialize
     showQuestion(0);
     updateTimer();
 </script>
+
+<form id="submitExamForm" method="POST" action="{{ route('exam.submit', $session->id) }}" style="display:none;">
+    @csrf
+</form>
+
 @endpush

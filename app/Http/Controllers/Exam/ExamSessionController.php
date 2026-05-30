@@ -26,7 +26,6 @@ class ExamSessionController extends Controller
      */
     public function selectSubject()
     {
-        // Check if system is active
         if (!$this->settingService->isSystemActive()) {
             return redirect('/student/dashboard')->with('error', 'System is currently under maintenance.');
         }
@@ -49,12 +48,16 @@ class ExamSessionController extends Controller
         $subject = Subject::findOrFail($validated['subject_id']);
         $user = auth()->user();
 
+        // ✅ Cast to integers (important!)
+        $questionCount = (int) $validated['question_count'];
+        $durationMinutes = (int) $validated['duration_minutes'];
+
         // Create exam session
         $session = $this->examSessionService->createSession(
             $user,
             $subject,
-            $validated['question_count'],
-            $validated['duration_minutes']
+            $questionCount,
+            $durationMinutes
         );
 
         return redirect("/exam/session/{$session->id}/start");
@@ -65,12 +68,10 @@ class ExamSessionController extends Controller
      */
     public function start(ExamSession $session)
     {
-        // Check if user owns this session
         if ($session->user_id !== auth()->id()) {
             abort(403);
         }
 
-        // Check if already started
         if ($session->is_locked) {
             return redirect("/exam/session/{$session->id}/questions");
         }
@@ -86,17 +87,14 @@ class ExamSessionController extends Controller
      */
     public function questions(ExamSession $session)
     {
-        // Check authorization
         if ($session->user_id !== auth()->id()) {
             abort(403);
         }
 
-        // Check if session is expired
         if ($this->examSessionService->isSessionExpired($session)) {
             return $this->autoSubmit($session);
         }
 
-        // Get questions
         $questions = $this->examSessionService->getExamQuestions($session);
         $timeRemaining = $this->examSessionService->getTimeRemaining($session);
 
@@ -121,9 +119,9 @@ class ExamSessionController extends Controller
         try {
             $answerLog = $this->examSessionService->submitAnswer(
                 $session,
-                $validated['mcq_id'],
+                (int) $validated['mcq_id'],
                 $validated['selected_answer'],
-                $validated['time_taken'] ?? 0
+                (int) ($validated['time_taken'] ?? 0)
             );
 
             return response()->json([
@@ -144,7 +142,6 @@ class ExamSessionController extends Controller
             abort(403);
         }
 
-        // Submit exam
         $session = $this->examSessionService->submitExam($session);
 
         return redirect("/exam/session/{$session->id}/result");

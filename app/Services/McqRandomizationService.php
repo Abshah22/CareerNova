@@ -9,11 +9,67 @@ use Illuminate\Database\Eloquent\Collection;
 class McqRandomizationService
 {
     /**
+     * Generate exam MCQs with dynamic subject distribution
+     * MOST IMPORTANT: MCQs generated ONCE and stored permanently
+     */
+    public function generateExamMcqs($testType, $testPattern)
+    {
+        // 1. Calculate subject allocations dynamically
+        $biologyCount = round($testType->mcq_count * ($testPattern->biology_percentage / 100));
+        $chemistryCount = round($testType->mcq_count * ($testPattern->chemistry_percentage / 100));
+        $physicsCount = round($testType->mcq_count * ($testPattern->physics_percentage / 100));
+        $englishCount = round($testType->mcq_count * ($testPattern->english_percentage / 100));
+        $reasoningCount = $testType->mcq_count - ($biologyCount + $chemistryCount + $physicsCount + $englishCount);
+
+        $mcqs = collect();
+
+        // 2. Select MCQs by subject with difficulty distribution
+        $mcqs = $mcqs->merge($this->getMcqsBySubject('Biology', $biologyCount));
+        $mcqs = $mcqs->merge($this->getMcqsBySubject('Chemistry', $chemistryCount));
+        $mcqs = $mcqs->merge($this->getMcqsBySubject('Physics', $physicsCount));
+        $mcqs = $mcqs->merge($this->getMcqsBySubject('English', $englishCount));
+        $mcqs = $mcqs->merge($this->getMcqsBySubject('Logical Reasoning', $reasoningCount));
+
+        // 3. Generate random order ONCE
+        $randomized = $mcqs->shuffle();
+
+        // 4. Return as array: [55, 91, 11, ...]
+        return $randomized->pluck('id')->toArray();
+    }
+
+    /**
+     * Get MCQs by subject with difficulty distribution
+     */
+    private function getMcqsBySubject($subjectName, $count)
+    {
+        if ($count <= 0) return collect();
+
+        $difficultyDistribution = [
+            'easy' => ceil($count * 0.33),
+            'medium' => ceil($count * 0.33),
+            'hard' => $count - (ceil($count * 0.33) * 2),
+        ];
+
+        $mcqs = collect();
+
+        foreach ($difficultyDistribution as $difficulty => $qty) {
+            $questions = Mcq::whereHas('subject', function ($q) use ($subjectName) {
+                $q->where('name', $subjectName);
+            })
+                ->where('difficulty', $difficulty)
+                ->where('status', 'active')
+                ->inRandomOrder()
+                ->limit($qty)
+                ->get();
+
+            $mcqs = $mcqs->merge($questions);
+        }
+
+        return $mcqs;
+    }
+
+    /**
      * Get randomized MCQs for an exam session
-     * 
-     * @param int $subjectId
-     * @param int $count
-     * @return Collection
      */
     public function getRandomMcqs($subjectId, $count = 10)
     {
@@ -26,11 +82,6 @@ class McqRandomizationService
 
     /**
      * Get randomized MCQs by difficulty level
-     * 
-     * @param int $subjectId
-     * @param int $count
-     * @param array $difficultyDistribution ['easy' => 30, 'medium' => 50, 'hard' => 20]
-     * @return Collection
      */
     public function getRandomMcqsByDifficulty($subjectId, $count = 10, $difficultyDistribution = [])
     {
@@ -62,9 +113,6 @@ class McqRandomizationService
 
     /**
      * Randomize option order for a question
-     * 
-     * @param Mcq $mcq
-     * @return array
      */
     public function randomizeOptions($mcq)
     {
@@ -77,7 +125,6 @@ class McqRandomizationService
 
         $shuffled = collect($options)->shuffle();
 
-        $mapping = [];
         $newCorrectAnswer = null;
         $newOptions = [];
 
@@ -93,40 +140,21 @@ class McqRandomizationService
         return [
             'options' => $newOptions,
             'correct_answer' => $newCorrectAnswer,
-            'mapping' => $mapping, // For tracking original positions if needed
         ];
     }
 
     /**
-     * Store randomized MCQs order in answer logs
-     * 
-     * @param ExamSession $session
-     * @param Collection $mcqs
-     * @return void
-     */
-    public function recordMcqOrder(ExamSession $session, Collection $mcqs)
-    {
-        $mcqs->each(function ($mcq, $index) use ($session) {
-            // The order will be stored when answer is logged
-            // This is a helper to track the sequence
-        });
-    }
-
-    /**
      * Reshuffle MCQs for session refresh
-     * (Only if session is not locked)
-     * 
-     * @param ExamSession $session
-     * @return Collection|null
+     * Returns NULL if session is locked (anti-cheating)
      */
     public function reshuffleMcqs(ExamSession $session)
     {
         if ($session->is_locked) {
-            return null;
+            return null; // Session locked - cannot reshuffle
         }
 
-        // Get current MCQ IDs from answer logs or session
-        $currentMcqIds = $session->answerLogs()->pluck('mcq_id')->toArray();
+        // Get current MCQ IDs from session
+        $currentMcqIds = json_decode($session->mcq_sequence, true);
 
         // Return same MCQs in different order
         return Mcq::whereIn('id', $currentMcqIds)

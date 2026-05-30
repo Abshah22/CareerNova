@@ -2,105 +2,87 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ExamSession extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
         'user_id',
         'subject_id',
         'total_questions',
+        'duration_minutes',
+        'mcq_sequence',
+        'started_at',
+        'expires_at',
+        'finished_at',
+        'is_locked',
+        'status',
+        'score',
         'correct_answers',
         'wrong_answers',
         'unanswered',
         'percentage',
-        'score',
-        'duration_minutes',
-        'time_taken_minutes',
-        'started_at',
-        'finished_at',
-        'status',
-        'is_locked',
     ];
 
     protected $casts = [
         'started_at' => 'datetime',
+        'expires_at' => 'datetime',
         'finished_at' => 'datetime',
+        'is_locked' => 'boolean',
+        'percentage' => 'float',
     ];
 
-    // Relationships
-    public function user()
+    /**
+     * Relationship: Belongs to User
+     */
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    public function subject()
+    /**
+     * Relationship: Belongs to Subject
+     */
+    public function subject(): BelongsTo
     {
         return $this->belongsTo(Subject::class);
     }
 
-    public function answerLogs()
+    /**
+     * Relationship: Has Many AnswerLogs
+     */
+    public function answerLogs(): HasMany
     {
         return $this->hasMany(AnswerLog::class);
     }
 
-    // Scopes
-    public function scopeCompleted($query)
+    /**
+     * Check if session is active
+     */
+    public function isActive(): bool
     {
-        return $query->where('status', 'completed');
+        return $this->status === 'active' && $this->expires_at && now()->lessThan($this->expires_at);
     }
 
-    public function scopeOngoing($query)
+    /**
+     * Check if session is expired
+     */
+    public function isExpired(): bool
     {
-        return $query->where('status', 'ongoing');
+        return $this->expires_at && now()->greaterThanOrEqualTo($this->expires_at);
     }
 
-    public function scopeByUser($query, $userId)
+    /**
+     * Get time remaining in seconds
+     */
+    public function getTimeRemainingInSeconds(): int
     {
-        return $query->where('user_id', $userId);
-    }
-
-    public function scopeBySubject($query, $subjectId)
-    {
-        return $query->where('subject_id', $subjectId);
-    }
-
-    // Accessors
-    public function getDurationFormatted()
-    {
-        return sprintf('%02d:%02d', intval($this->duration_minutes / 60), $this->duration_minutes % 60);
-    }
-
-    public function getTimeRemainingSeconds()
-    {
-        if ($this->status === 'completed' || $this->finished_at) {
+        if (!$this->expires_at || $this->status === 'completed') {
             return 0;
         }
 
-        $elapsed = now()->diffInSeconds($this->started_at);
-        $totalSeconds = $this->duration_minutes * 60;
-        $remaining = $totalSeconds - $elapsed;
-
-        return max(0, $remaining);
-    }
-
-    public function isExpired()
-    {
-        return $this->getTimeRemainingSeconds() <= 0;
-    }
-
-    public function getResult()
-    {
-        return [
-            'total_questions' => $this->total_questions,
-            'correct_answers' => $this->correct_answers,
-            'wrong_answers' => $this->wrong_answers,
-            'unanswered' => $this->unanswered,
-            'percentage' => $this->percentage,
-            'score' => $this->score,
-        ];
+        return max(0, $this->expires_at->diffInSeconds(now(), false));
     }
 }

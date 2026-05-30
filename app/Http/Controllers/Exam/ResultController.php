@@ -17,7 +17,6 @@ class ResultController extends Controller
     {
         $this->examSessionService = $examSessionService;
         $this->scoringService = $scoringService;
-        $this->middleware('auth');
     }
 
     /**
