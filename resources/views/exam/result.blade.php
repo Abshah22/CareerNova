@@ -81,20 +81,36 @@
             </div>
         @endif
 
-        {{-- ANSWER REVIEW --}}
+        {
+
+                            @if ($result['explanation'])
+                                <div class="alert alert-info small mt-3 mb-0">
+                                    <strong><i class="fas fa-book"></i> Explanation:</strong>
+                                    <p class="mb-0">{{ $result['explanation'] }}</p>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </div>{{-- ANSWER REVIEW --}}
         <div class="card">
             <div class="card-header bg-light">
-                <h5 class="mb-0">📋 Answer Review</h5>
+                <h5 class="mb-0">📋 Answer Review Sheet</h5>
             </div>
             <div class="card-body">
                 @foreach ($results as $index => $result)
-                    <div class="card mb-3 {{ $result['is_correct'] ? 'border-success' : 'border-danger' }}">
-                        <div class="card-header {{ $result['is_correct'] ? 'bg-success' : 'bg-danger' }} text-white">
+                    <div class="card mb-3">
+                        <div class="card-header">
                             <div class="d-flex justify-content-between align-items-center">
                                 <h6 class="mb-0">Question {{ $index + 1 }}</h6>
-                                <span class="badge {{ $result['is_correct'] ? 'bg-light' : 'bg-danger' }} text-dark">
-                                    {{ $result['is_correct'] ? '✓ CORRECT' : '✗ INCORRECT' }}
-                                </span>
+                                @if ($result['is_correct'])
+                                    <span class="badge bg-success"><i class="fas fa-check-circle"></i> Correct</span>
+                                @elseif (!empty($result['student_answer']))
+                                    <span class="badge bg-danger"><i class="fas fa-times-circle"></i> Incorrect</span>
+                                @else
+                                    <span class="badge bg-secondary"><i class="fas fa-question-circle"></i> Unanswered</span>
+                                @endif
                             </div>
                         </div>
                         <div class="card-body">
@@ -107,20 +123,49 @@
                                         $isStudentAnswer = $result['student_answer'] === $option;
                                         $isCorrectAnswer = $result['correct_answer'] === $option;
                                     @endphp
-                                    <div class="p-3 mb-2 rounded {{ 
-                                        $isCorrectAnswer ? 'bg-success bg-opacity-10 border border-success' : 
-                                        ($isStudentAnswer ? 'bg-danger bg-opacity-10 border border-danger' : 'bg-light')
-                                    }}">
-                                        <strong class="text-primary">{{ $option }}.</strong> {{ $optionText }}
-                                        
+                                    <div class="p-3 mb-2 rounded d-flex align-items-center
                                         @if ($isCorrectAnswer)
-                                            <span class="badge bg-success float-end">✓ Correct Answer</span>
+                                            border border-success bg-success bg-opacity-10
+                                        @elseif ($isStudentAnswer && !$isCorrectAnswer)
+                                            border border-danger bg-danger bg-opacity-10
+                                        @else
+                                            border bg-light
                                         @endif
-                                        @if ($isStudentAnswer && !$isCorrectAnswer)
-                                            <span class="badge bg-danger float-end">✗ Your Answer</span>
-                                        @endif
-                                        @if ($isStudentAnswer && $isCorrectAnswer)
-                                            <span class="badge bg-success float-end">✓ Your Answer</span>
+                                    ">
+                                        <!-- Circle indicator -->
+                                        <div style="
+                                            width: 30px;
+                                            height: 30px;
+                                            border-radius: 50%;
+                                            display: flex;
+                                            align-items: center;
+                                            justify-content: center;
+                                            font-weight: bold;
+                                            margin-right: 15px;
+                                            @if ($isCorrectAnswer)
+                                                background: #28a745;
+                                                color: white;
+                                            @elseif ($isStudentAnswer && !$isCorrectAnswer)
+                                                background: #dc3545;
+                                                color: white;
+                                            @else
+                                                background: #e9ecef;
+                                                color: #6c757d;
+                                            @endif
+                                        ">
+                                            {{ $option }}
+                                        </div>
+
+                                        <div class="flex-grow-1">
+                                            <strong>{{ $option }}.</strong> {{ $optionText }}
+                                        </div>
+
+                                        @if ($isCorrectAnswer && $isStudentAnswer)
+                                            <span class="badge bg-success ms-2">Your Answer ✓</span>
+                                        @elseif ($isStudentAnswer)
+                                            <span class="badge bg-danger ms-2">Your Answer ✗</span>
+                                        @elseif ($isCorrectAnswer)
+                                            <span class="badge bg-success ms-2">Correct ✓</span>
                                         @endif
                                     </div>
                                 @endforeach
@@ -128,7 +173,7 @@
 
                             @if ($result['explanation'])
                                 <div class="alert alert-info small mt-3 mb-0">
-                                    <strong><i class="fas fa-book"></i> Explanation:</strong>
+                                    <strong><i class="fas fa-lightbulb"></i> Explanation:</strong>
                                     <p class="mb-0">{{ $result['explanation'] }}</p>
                                 </div>
                             @endif

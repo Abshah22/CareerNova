@@ -3,6 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AdminManagementController;
+use App\Http\Controllers\Admin\McqApprovalController;
 use App\Http\Controllers\Teacher\DashboardController as TeacherDashboardController;
 use App\Http\Controllers\Teacher\CsvController;
 use App\Http\Controllers\Student\DashboardController as StudentDashboardController;
@@ -70,6 +71,14 @@ Route::middleware('auth')->group(function () {
         Route::post('/admins', [AdminManagementController::class, 'store'])->name('admins.store');
         Route::delete('/admins/{admin}', [AdminManagementController::class, 'destroyAdmin'])->name('admins.destroy');
         Route::get('/subjects', [AdminController::class, 'subjects'])->name('subjects');
+        // MCQ Approval Routes
+        Route::prefix('mcq-approval')->name('mcq-approval.')->group(function () {
+        Route::get('/', [McqApprovalController::class, 'index'])->name('index');
+        Route::get('/{mcq}', [McqApprovalController::class, 'show'])->name('show');
+        Route::patch('/{mcq}/approve', [McqApprovalController::class, 'approve'])->name('approve');
+        Route::patch('/{mcq}/reject', [McqApprovalController::class, 'reject'])->name('reject');
+        Route::post('/bulk-approve', [McqApprovalController::class, 'bulkApprove'])->name('bulk-approve');
+        });
     });
 
     // Teacher Routes
@@ -88,14 +97,22 @@ Route::middleware('auth')->group(function () {
 
     });
 
-    // Student Routes
+    // Student Dashboard Routes
     Route::middleware('student')->prefix('student')->name('student.')->group(function () {
         Route::get('/dashboard', [StudentDashboardController::class, 'index'])->name('dashboard');
         Route::get('/exams', [StudentDashboardController::class, 'exams'])->name('exams');
         Route::get('/results', [StudentDashboardController::class, 'results'])->name('results');
         Route::get('/analytics', [StudentDashboardController::class, 'analytics'])->name('analytics');
-        Route::post('/exam/progress', [McqController::class, 'getProgress'])->name('exam.progress');
-        Route::post('/exam/mark-review', [McqController::class, 'markForReview'])->name('exam.mark-review');
+    });
+
+    // Exam Routes
+    Route::middleware('student')->prefix('exam')->name('exam.')->group(function () {
+        Route::get('/selection', [ExamSelectionController::class, 'index'])->name('selection');
+        Route::post('/create-custom', [ExamSelectionController::class, 'createCustomTest'])->name('create-custom');
+        Route::post('/load-preset/{testPackage}', [ExamSelectionController::class, 'loadPresetTest'])->name('load-preset');
+
+        Route::post('/progress', [McqController::class, 'getProgress'])->name('progress');
+        Route::post('/mark-review', [McqController::class, 'markForReview'])->name('mark-review');
     });
 
     // Parent Routes
@@ -113,5 +130,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/answer', [McqController::class, 'saveAnswer'])->name('answer');
         Route::post('/submit', [McqController::class, 'submitTest'])->name('submit');
         Route::get('/result/{examSession}', [McqController::class, 'result'])->name('result');
+        // 🚀 ADD THIS LINE BELOW:
+        Route::get('/progress', [McqController::class, 'getProgress'])->name('progress');
+        Route::post('/mark-review', [McqController::class, 'markForReview'])->name('mark-review');
     });
 });

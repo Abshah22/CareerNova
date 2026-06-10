@@ -59,7 +59,7 @@ class McqController extends Controller
         // Check if there's an existing exam session
         $existingExam = ExamSession::where('user_id', auth()->id())
             ->where('subject_id', $subjectId)
-            ->where('status', 'in_progress')
+            ->where('status', 'ongoing')
             ->latest()
             ->first();
 
@@ -227,27 +227,53 @@ class McqController extends Controller
                 ->with('error', 'Exam session expired');
         }
 
-        // Calculate results
-        $calculation = $this->examService->calculateResults($examSessionId, $answers, $mcqs);
+        // Fetch exam session
+        $examSession = \App\Models\ExamSession::findOrFail($examSessionId);
 
-        // Save results
-        $this->examService->saveResults($examSessionId, $calculation, $answers, $mcqs);
+        // Calculate correct answers
+        $correctAnswers = 0;
 
-        // Clear session
-        session()->forget([
-            'exam_mcqs',
-            'exam_started',
-            'exam_start_time',
-            'exam_answers',
-            'exam_subject_id',
-            'exam_time_remaining',
-            'exam_session_id',
+        foreach ($mcqs as $mcq) {
+            if (isset($answers[$mcq->id])) {
+                if ($answers[$mcq->id] === $mcq->correct_option) {
+                    $correctAnswers++;
+                }
+            }
+        }
+
+        // Counts
+        $totalQuestions = count($mcqs);
+        $answeredCount = count($answers);
+        $wrongAnswers = $answeredCount - $correctAnswers;
+        $unansweredCount = $totalQuestions - $answeredCount;
+
+        $percentage = ($totalQuestions > 0)
+            ? ($correctAnswers / $totalQuestions * 100)
+            : 0;
+
+        // Update DB
+        $examSession->update([
+            'score' => $correctAnswers,
+            'correct_answers' => $correctAnswers,
+            'wrong_answers' => $wrongAnswers,
+            'unanswered_count' => $unansweredCount,
+            'percentage' => round($percentage, 2),
+            'finished_at' => now(),
+            'status' => 'completed',
+            'is_submitted' => true,
         ]);
 
-        return redirect()->route('exam.result', $examSessionId)
+        // Clear session
+    session()->forget([
+        'exam_mcqs',
+        'exam_answers',
+        'exam_session_id',
+        ]);
+
+        return redirect()->route('exam.results', $examSession->id)
             ->with('success', 'Exam submitted successfully!');
     }
-
+    
     /**
      * Show exam result
      */

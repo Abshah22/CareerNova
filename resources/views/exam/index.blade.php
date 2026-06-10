@@ -207,6 +207,8 @@
 
                     <form action="{{ route('exam.start') }}" method="POST" class="mt-6">
                         @csrf
+                        <input type="hidden" name="subject_id" value="{{ request('subject_id') }}">
+
                         <button type="submit" class="btn btn-success btn-lg px-5" id="start-btn">
                             <i class="fas fa-play"></i> Start Exam Now
                         </button>

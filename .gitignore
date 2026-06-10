@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 *.log
 .DS_Store
 .env
@@ -22,3 +23,6 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+=======
+.env
+>>>>>>> 8f26cfeeccfb1c155236961e18bdd4fa3e05c418
